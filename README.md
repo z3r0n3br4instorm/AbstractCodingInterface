@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="Public/logo.png" alt="ACI Logo" width="600" />
+</div>
+
 # ACI — Abstract Coding Interface
 
 > **Linux & macOS — install in one line:**

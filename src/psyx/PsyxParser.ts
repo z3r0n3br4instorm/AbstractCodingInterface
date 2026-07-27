@@ -1,4 +1,4 @@
-export type PsyxBlockKind = 'func' | 'func-main' | 'class' | 'preamble';
+export type PsyxBlockKind = 'func' | 'func-main' | 'class' | 'preamble' | 'import';
 
 export interface PsyxBlock {
   kind: PsyxBlockKind;
@@ -17,6 +17,8 @@ const FUNC_MAIN = /^FUNC-MAIN$/;
 const FUNC_END = /^FUNC-END$/;
 const CLASS_START = /^CLASS-START\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:[\s\(].*)?$/;
 const CLASS_END = /^CLASS-END$/;
+const IMPORT_START = /^IMPORT-BLK-START$/;
+const IMPORT_END = /^IMPORT-BLK-END$/;
 const AFTER_BLOCK = /^AFTER-BLOCK-([a-zA-Z_][a-zA-Z0-9_]*)$/;
 const BEFORE_BLOCK = /^BEFORE-BLOCK-([a-zA-Z_][a-zA-Z0-9_]*)$/;
 const BETWEEN_BLOCKS = /^BETWEEN-BLOCKS-([a-zA-Z_][a-zA-Z0-9_]*)-([a-zA-Z_][a-zA-Z0-9_]*)$/;
@@ -63,6 +65,7 @@ export function parsePsyx(source: string): PsyxBlock[] {
     const funcMatch = line.match(FUNC_START);
     const funcMainMatch = line.match(FUNC_MAIN);
     const classMatch = line.match(CLASS_START);
+    const importMatch = line.match(IMPORT_START);
 
     if (line.startsWith('FUNC-START') && !funcMatch) {
       throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'FUNC-START <name>' where <name> is a valid identifier. You can optionally include arguments after the name.`);
@@ -73,22 +76,32 @@ export function parsePsyx(source: string): PsyxBlock[] {
     if (line.startsWith('FUNC-MAIN') && !funcMainMatch) {
       throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'FUNC-MAIN'.`);
     }
+    if (line.startsWith('IMPORT-BLK-START') && !importMatch) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'IMPORT-BLK-START'.`);
+    }
     if (line.startsWith('FUNC-END') && !line.match(FUNC_END)) {
       throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'FUNC-END'.`);
     }
     if (line.startsWith('CLASS-END') && !line.match(CLASS_END)) {
       throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'CLASS-END'.`);
     }
+    if (line.startsWith('IMPORT-BLK-END') && !line.match(IMPORT_END)) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'IMPORT-BLK-END'.`);
+    }
 
-    if (funcMatch || funcMainMatch || classMatch) {
+    if (funcMatch || funcMainMatch || classMatch || importMatch) {
       if (preambleLines.length > 0 && preambleLines.some(l => l.trim() !== '')) {
         blocks.push({ kind: 'preamble', name: '__preamble__', body: preambleLines.join('\n').trim(), index: blockIndex++ });
         preambleLines.length = 0;
       }
 
-      const kind: PsyxBlockKind = funcMainMatch ? 'func-main' : (funcMatch ? 'func' : 'class');
-      const name = funcMainMatch ? 'main' : (funcMatch ?? classMatch)![1];
-      const endRe = (funcMatch || funcMainMatch) ? FUNC_END : CLASS_END;
+      let kind: PsyxBlockKind = 'class';
+      if (funcMatch) kind = 'func';
+      if (funcMainMatch) kind = 'func-main';
+      if (importMatch) kind = 'import';
+      
+      const name = importMatch ? '__imports__' : (funcMainMatch ? 'main' : (funcMatch ?? classMatch)![1]);
+      const endRe = importMatch ? IMPORT_END : ((funcMatch || funcMainMatch) ? FUNC_END : CLASS_END);
       const bodyLines: string[] = [lines[i]];
       i++;
 

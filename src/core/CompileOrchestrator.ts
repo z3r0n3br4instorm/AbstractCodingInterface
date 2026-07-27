@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { BackendFactory } from '../backends/BackendFactory';
 import { Configuration } from '../config/Configuration';
 import { parsePsyx, blocksChanged, PsyxBlock } from '../psyx/PsyxParser';
-import { serializeOutput, deserializeOutput, mergeBlocks, CompiledBlock, getCommentSyntax } from '../psyx/OutputAssembler';
+import { serializeOutput, deserializeOutput, mergeBlocks, CompiledBlock, getCommentSyntax, extractImports } from '../psyx/OutputAssembler';
 
 const LANG_EXTS: Record<string, string> = {
   python: 'py', javascript: 'js', typescript: 'ts',
@@ -27,11 +27,13 @@ function extractCode(text: string): string {
 
 function buildCompileSystemPrompt(targetLang: string, kind: string): string {
   let prompt = `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
-Output ONLY the raw ${targetLang} code — no markdown fences, no explanations, no comments, no <think> blocks.
+CRITICAL: Output ONLY the raw ${targetLang} code — no markdown fences, no conversational text, no explanations, no <think> blocks. Outputting anything other than raw code is a fatal error.
 Preserve correct indentation and style for ${targetLang}.`;
 
-  if (kind === 'func' || kind === 'class') {
-    prompt += `\nCRITICAL: DO NOT output any import, include, or require statements. Assume all necessary libraries are already imported globally in the file. Output ONLY the function or class definition.`;
+  if (kind === 'func' || kind === 'class' || kind === 'func-main') {
+    prompt += `\nIf this block requires any libraries to be imported/included, output those import statements at the VERY TOP of your response (line 1), followed by a blank line, and then the function/class code.`;
+  } else if (kind === 'import') {
+    prompt += `\nThis is the global imports block. Output ONLY the required import/include statements for the target language.`;
   }
 
   if (kind === 'func-main') {
@@ -209,6 +211,7 @@ export class CompileOrchestrator {
 
       const backend = BackendFactory.getBackend();
       const freshCode = new Map<string, string>();
+      const globalImports = new Set<string>();
 
       for (let i = 0; i < blocksToCompile.length; i++) {
         const block = blocksToCompile[i];
@@ -233,6 +236,7 @@ export class CompileOrchestrator {
 
           const now = Date.now();
           if (now - lastUpdate > 50) {
+            // live streaming might have imports at top, we don't extract until final
             const assembled = mergeBlocks(existingCompiledBlocks, newBlocks, freshCode);
             const newText = serializeOutput(assembled, ext);
             await editor.edit(eb => {
@@ -244,7 +248,29 @@ export class CompileOrchestrator {
           }
         }
 
-        freshCode.set(key, extractCode(stripThinking(blockBuffer)));
+        let finalBufferContent = extractCode(stripThinking(blockBuffer)).trim();
+        if (block.kind !== 'import' && block.kind !== 'preamble') {
+          const extracted = extractImports(finalBufferContent);
+          finalBufferContent = extracted.remainingCode;
+          extracted.imports.forEach(i => globalImports.add(i));
+        }
+        freshCode.set(key, finalBufferContent);
+      }
+
+      if (globalImports.size > 0) {
+        let importBlock = newBlocks.find(b => b.kind === 'import');
+        if (!importBlock) {
+          importBlock = { kind: 'import', name: '__imports__', body: '', index: -1 };
+          const preambleIndex = newBlocks.findIndex(b => b.kind === 'preamble');
+          if (preambleIndex !== -1) newBlocks.splice(preambleIndex + 1, 0, importBlock);
+          else newBlocks.unshift(importBlock);
+        }
+        
+        const existingImportCode = existingCompiledBlocks.find(b => b.psyxKind === 'import' && b.psyxName === '__imports__')?.code || '';
+        const existingImportLines = new Set(existingImportCode.split('\n').map(l => l.trim()).filter(l => l));
+        globalImports.forEach(i => existingImportLines.add(i));
+        
+        freshCode.set('import:__imports__', Array.from(existingImportLines).join('\n'));
       }
 
       const finalAssembled = mergeBlocks(existingCompiledBlocks, newBlocks, freshCode);

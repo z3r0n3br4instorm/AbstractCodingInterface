@@ -77,6 +77,10 @@ Edit any block, save again — only that block is recompiled and patched in. Eve
 ## PSyx at a Glance
 
 ```text
+IMPORT-BLK-START
+  ... explicit import requirements ...
+IMPORT-BLK-END
+
 FUNC-START <name>
   ... pseudocode ...
 FUNC-END

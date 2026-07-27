@@ -37,6 +37,33 @@ function escapeRegex(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+export function extractImports(code: string): { imports: string[], remainingCode: string } {
+  const lines = code.split('\n');
+  const imports: string[] = [];
+  const remaining: string[] = [];
+  let readingImports = true;
+
+  for (const line of lines) {
+    if (readingImports) {
+      const t = line.trim();
+      if (!t) {
+        // skip empty lines at the top, or keep them if you want, but we ignore them
+        continue;
+      }
+      if (t.startsWith('import ') || t.startsWith('from ') || t.startsWith('#include ') || t.startsWith('using ') || t.startsWith('require(')) {
+        imports.push(line);
+      } else {
+        readingImports = false;
+        remaining.push(line);
+      }
+    } else {
+      remaining.push(line);
+    }
+  }
+
+  return { imports, remainingCode: remaining.join('\n').trim() };
+}
+
 export function serializeOutput(blocks: CompiledBlock[], ext: string): string {
   const c = getCommentSyntax(ext);
   return blocks

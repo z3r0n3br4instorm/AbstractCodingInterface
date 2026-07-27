@@ -2,9 +2,6 @@
   <img src="Public/logo.png" alt="ACI Logo" width="600" />
 </div>
 
-<div align="center">
-  <img src="Public/screenshot.png" alt="ACI Screenshot" width="800" />
-</div>
 
 # ACI — Abstract Coding Interface
 
@@ -17,6 +14,9 @@ ACI is a VS Code extension for spec-driven local-model coding. Write high-level 
 
 The core idea: keep a human-readable spec as the source of truth, and let a cheap local model do the mechanical translation. Editing a single function recompiles only that function, not the whole file.
 
+<div align="center">
+  <img src="Public/screenshot.png" alt="ACI Screenshot" width="800" />
+</div>
 ---
 
 ### Key Features

@@ -2,6 +2,10 @@
   <img src="Public/logo.png" alt="ACI Logo" width="600" />
 </div>
 
+<div align="center">
+  <img src="Public/screenshot.png" alt="ACI Screenshot" width="800" />
+</div>
+
 # ACI — Abstract Coding Interface
 
 > **Linux & macOS — install in one line:**

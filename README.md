@@ -17,6 +17,7 @@ The core idea: keep a human-readable spec as the source of truth, and let a chea
 <div align="center">
   <img src="Public/screenshot.png" alt="ACI Screenshot" width="800" />
 </div>
+
 ---
 
 ### Key Features

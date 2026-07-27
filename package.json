@@ -110,6 +110,11 @@
           "default": "llama3",
           "description": "The model to use for generation"
         },
+        "aci.temperature": {
+          "type": "number",
+          "default": 0,
+          "description": "The temperature (creativity/randomness) of the model generation. Default is 0 for maximum determinism."
+        },
         "aci.targetLanguage": {
           "type": "string",
           "default": "python",

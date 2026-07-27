@@ -8,6 +8,7 @@ export class OpenAICompatibleBackend implements LocalModelBackend {
       model: Configuration.model,
       messages: messages,
       stream: true,
+      temperature: Configuration.temperature
     };
 
     const response = await fetch(url, {

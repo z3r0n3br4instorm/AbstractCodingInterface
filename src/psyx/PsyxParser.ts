@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 export type PsyxBlockKind = 'func' | 'func-main' | 'class' | 'preamble' | 'import';
 
 export interface PsyxBlock {
@@ -10,6 +12,7 @@ export interface PsyxBlock {
     target1: string;
     target2?: string;
   };
+  hash: string;
 }
 
 const FUNC_START = /^FUNC-START\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:[\s\(].*)?$/;
@@ -91,7 +94,9 @@ export function parsePsyx(source: string): PsyxBlock[] {
 
     if (funcMatch || funcMainMatch || classMatch || importMatch) {
       if (preambleLines.length > 0 && preambleLines.some(l => l.trim() !== '')) {
-        blocks.push({ kind: 'preamble', name: '__preamble__', body: preambleLines.join('\n').trim(), index: blockIndex++ });
+        const body = preambleLines.join('\n').trim();
+        const hash = crypto.createHash('md5').update(body).digest('hex').substring(0, 8);
+        blocks.push({ kind: 'preamble', name: '__preamble__', body, index: blockIndex++, hash });
         preambleLines.length = 0;
       }
 
@@ -114,7 +119,9 @@ export function parsePsyx(source: string): PsyxBlock[] {
         i++;
       }
 
-      blocks.push({ kind, name, body: bodyLines.join('\n').trim(), index: blockIndex++, position: currentPosition });
+      const body = bodyLines.join('\n').trim();
+      const hash = crypto.createHash('md5').update(body).digest('hex').substring(0, 8);
+      blocks.push({ kind, name, body, index: blockIndex++, position: currentPosition, hash });
       currentPosition = undefined;
     } else {
       preambleLines.push(lines[i]);
@@ -123,7 +130,9 @@ export function parsePsyx(source: string): PsyxBlock[] {
   }
 
   if (preambleLines.some(l => l.trim() !== '')) {
-    blocks.push({ kind: 'preamble', name: '__preamble__', body: preambleLines.join('\n').trim(), index: blockIndex++ });
+    const body = preambleLines.join('\n').trim();
+    const hash = crypto.createHash('md5').update(body).digest('hex').substring(0, 8);
+    blocks.push({ kind: 'preamble', name: '__preamble__', body, index: blockIndex++, hash });
   }
 
   return blocks;

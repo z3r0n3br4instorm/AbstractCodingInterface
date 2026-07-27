@@ -8,6 +8,9 @@ export class OllamaBackend implements LocalModelBackend {
       model: Configuration.model,
       messages: messages,
       stream: true,
+      options: {
+        temperature: Configuration.temperature
+      }
     };
 
     const response = await fetch(url, {

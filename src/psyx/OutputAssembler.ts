@@ -4,6 +4,7 @@ export interface CompiledBlock {
   psyxName: string;
   psyxKind: string;
   code: string;
+  hash?: string;
 }
 
 export function getCommentSyntax(ext: string): { start: string, end: string } {
@@ -37,25 +38,30 @@ function escapeRegex(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function extractImports(code: string): { imports: string[], remainingCode: string } {
+const IMPORT_PATTERNS: Record<string, RegExp> = {
+  c: /^\s*#\s*include\s*[<"]/i,
+  cpp: /^\s*#\s*include\s*[<"]/i,
+  python: /^\s*(import\s|from\s.+\simport\s)/i,
+  javascript: /^\s*(import\s|const\s.+=\s*require\()/i,
+  typescript: /^\s*(import\s|const\s.+=\s*require\()/i,
+  java: /^\s*import\s/i,
+  go: /^\s*import\s/i,
+  rust: /^\s*use\s/i,
+  ruby: /^\s*require\s/i,
+  php: /^\s*(require|include)(_once)?\s/i,
+};
+
+export function extractImports(code: string, lang: string): { imports: string[], remainingCode: string } {
   const lines = code.split('\n');
   const imports: string[] = [];
   const remaining: string[] = [];
-  let readingImports = true;
+  
+  // Default to a generous catch-all if language isn't explicitly matched
+  const pattern = IMPORT_PATTERNS[lang.toLowerCase()] || /^\s*(import\s|from\s|#\s*include\s|using\s|require\s*\()/i;
 
   for (const line of lines) {
-    if (readingImports) {
-      const t = line.trim();
-      if (!t) {
-        // skip empty lines at the top, or keep them if you want, but we ignore them
-        continue;
-      }
-      if (t.startsWith('import ') || t.startsWith('from ') || t.startsWith('#include ') || t.startsWith('using ') || t.startsWith('require(')) {
-        imports.push(line);
-      } else {
-        readingImports = false;
-        remaining.push(line);
-      }
+    if (pattern.test(line)) {
+      imports.push(line);
     } else {
       remaining.push(line);
     }
@@ -67,7 +73,10 @@ export function extractImports(code: string): { imports: string[], remainingCode
 export function serializeOutput(blocks: CompiledBlock[], ext: string): string {
   const c = getCommentSyntax(ext);
   return blocks
-    .map(b => `${c.start}ACI-BLOCK: ${b.psyxKind}:${b.psyxName}${c.end}\n${b.code.trimEnd()}\n${c.start}ACI-BLOCK-END${c.end}`)
+    .map(b => {
+      const hashPart = b.hash ? ` [hash:${b.hash}]` : '';
+      return `${c.start}ACI-BLOCK: ${b.psyxKind}:${b.psyxName}${hashPart}${c.end}\n${b.code.trimEnd()}\n${c.start}ACI-BLOCK-END${c.end}`;
+    })
     .join('\n\n') + '\n';
 }
 
@@ -76,8 +85,8 @@ export function deserializeOutput(source: string, ext: string): CompiledBlock[] 
   const start = escapeRegex(c.start);
   const end = escapeRegex(c.end);
   
-  // Format: {start}ACI-BLOCK: {kind}:{name}{end}\n{code}\n{start}ACI-BLOCK-END{end}
-  const regexStr = `${start}ACI-BLOCK:\\s*([^\\s:]+):([^\\n]+?)${end}\\n([\\s\\S]*?)\\n${start}ACI-BLOCK-END${end}`;
+  // Format: {start}ACI-BLOCK: {kind}:{name} [hash:{hash}]{end}\n{code}\n{start}ACI-BLOCK-END{end}
+  const regexStr = `${start}ACI-BLOCK:\\s*([^\\s:]+):([^\\s]+)(?:\\s+\\[hash:([a-f0-9]+)\\])?${end}\\n([\\s\\S]*?)\\n${start}ACI-BLOCK-END${end}`;
   const regex = new RegExp(regexStr, 'g');
 
   const blocks: CompiledBlock[] = [];
@@ -86,7 +95,8 @@ export function deserializeOutput(source: string, ext: string): CompiledBlock[] 
     blocks.push({
       psyxKind: match[1],
       psyxName: match[2].trim(),
-      code: match[3].trimEnd()
+      hash: match[3],
+      code: match[4].trimEnd()
     });
   }
   return blocks;
@@ -108,7 +118,7 @@ export function mergeBlocks(existing: CompiledBlock[], incoming: PsyxBlock[], fr
       }
     }
 
-    const newCompiledBlock = { psyxName: block.name, psyxKind: block.kind, code };
+    const newCompiledBlock = { psyxName: block.name, psyxKind: block.kind, code, hash: block.hash };
 
     if (block.position) {
       if (existingIndex !== -1) {

@@ -178,7 +178,6 @@ export class CompileOrchestrator {
 
       let existingText: string | null = null;
       let existingCompiledBlocks: CompiledBlock[] = [];
-      let existingPsyxBlocks: PsyxBlock[] = [];
       let targetDoc: vscode.TextDocument | null = null;
 
       try {
@@ -190,7 +189,10 @@ export class CompileOrchestrator {
       }
 
       const blocksToCompile = existingText
-        ? blocksChanged(existingPsyxBlocks, newBlocks)
+        ? newBlocks.filter(b => {
+            const existing = existingCompiledBlocks.find(c => c.psyxKind === b.kind && c.psyxName === b.name);
+            return !existing || existing.hash !== b.hash;
+          })
         : newBlocks;
 
       if (!existingText) {
@@ -250,7 +252,7 @@ export class CompileOrchestrator {
 
         let finalBufferContent = extractCode(stripThinking(blockBuffer)).trim();
         if (block.kind !== 'import' && block.kind !== 'preamble') {
-          const extracted = extractImports(finalBufferContent);
+          const extracted = extractImports(finalBufferContent, targetLang);
           finalBufferContent = extracted.remainingCode;
           extracted.imports.forEach(i => globalImports.add(i));
         }
@@ -260,10 +262,10 @@ export class CompileOrchestrator {
       if (globalImports.size > 0) {
         let importBlock = newBlocks.find(b => b.kind === 'import');
         if (!importBlock) {
-          importBlock = { kind: 'import', name: '__imports__', body: '', index: -1 };
+          importBlock = { kind: 'import', name: '__imports__', body: '', index: -1, hash: '' };
           const preambleIndex = newBlocks.findIndex(b => b.kind === 'preamble');
-          if (preambleIndex !== -1) newBlocks.splice(preambleIndex + 1, 0, importBlock);
-          else newBlocks.unshift(importBlock);
+          if (preambleIndex !== -1) newBlocks.splice(preambleIndex + 1, 0, importBlock!);
+          else newBlocks.unshift(importBlock!);
         }
         
         const existingImportCode = existingCompiledBlocks.find(b => b.psyxKind === 'import' && b.psyxName === '__imports__')?.code || '';

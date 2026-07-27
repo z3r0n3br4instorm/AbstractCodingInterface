@@ -13,6 +13,10 @@ export class Configuration {
     return vscode.workspace.getConfiguration('aci').get<string>('model') || 'llama3';
   }
 
+  public static get temperature(): number {
+    return vscode.workspace.getConfiguration('aci').get<number>('temperature') ?? 0;
+  }
+
   public static get targetLanguage(): string {
     return vscode.workspace.getConfiguration('aci').get<string>('targetLanguage') || 'python';
   }

@@ -25,10 +25,16 @@ function extractCode(text: string): string {
   return text;
 }
 
-function buildCompileSystemPrompt(targetLang: string): string {
-  return `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
+function buildCompileSystemPrompt(targetLang: string, kind: string): string {
+  let prompt = `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
 Output ONLY the raw ${targetLang} code — no markdown fences, no explanations, no comments, no <think> blocks.
 Preserve correct indentation and style for ${targetLang}.`;
+
+  if (kind === 'func-main') {
+    prompt += `\n\nCRITICAL: This is the MAIN function entry point of the program. You must output the standard main execution block for ${targetLang}. For example, in Python: \`if __name__ == "__main__":\`, in Go: \`func main()\`, in Java: \`public static void main(String[] args)\`, etc.`;
+  }
+
+  return prompt;
 }
 
 function buildMakePsyxCompatibleSystemPrompt(sourceLang: string, ext: string): string {
@@ -41,6 +47,7 @@ ${c.start}ACI-BLOCK: func:<function_name>${c.end}
 ${c.start}ACI-BLOCK-END${c.end}
 
 For classes, use \`class:<class_name>\`.
+If you find the main entry point of the program (e.g. \`if __name__ == "__main__":\` or \`func main()\`), wrap it with \`func-main:main\`.
 Leave all other code (imports, globals) unannotated.
 DO NOT change the source code itself, just insert the comment lines. Output ONLY the fully annotated source code, with NO markdown code fences (\`\`\`) and NO <think> blocks.`;
 }
@@ -207,7 +214,7 @@ export class CompileOrchestrator {
         this.statusBar.show();
 
         const messages = [
-          { role: 'system', content: buildCompileSystemPrompt(targetLang) },
+          { role: 'system', content: buildCompileSystemPrompt(targetLang, block.kind) },
           { role: 'user', content: block.body }
         ];
 

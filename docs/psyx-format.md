@@ -30,6 +30,16 @@ FUNC-START <name>
 FUNC-END
 ```
 
+### Main Function Block
+
+Use `FUNC-MAIN` to define the main entry point of the program. ACI will automatically translate this into the standard main function convention for the target language (e.g., `if __name__ == "__main__":` in Python, or `func main()` in Go).
+
+```
+FUNC-MAIN
+  ... main logic ...
+FUNC-END
+```
+
 - `<name>` must be a single word (no spaces). Use underscores for multi-word names.
 - Maps to a function or method in the target language.
 - On re-save, if only this block changed, only this function is recompiled.

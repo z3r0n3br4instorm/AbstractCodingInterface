@@ -76,12 +76,18 @@ Edit any block, save again — only that block is recompiled and patched in. Eve
 
 ## PSyx at a Glance
 
-```
-FUNC-START <name>   →  compiles to a function
+```text
+FUNC-START <name>
+  ... pseudocode ...
 FUNC-END
 
-CLASS-START <name>  →  compiles to a class
+CLASS-START <name>
+  ... pseudocode ...
 CLASS-END
+
+FUNC-MAIN
+  ... main program logic ...
+FUNC-END
 
 # anything outside a marker = preamble (imports, globals)
 ```

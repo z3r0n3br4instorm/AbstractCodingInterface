@@ -1,4 +1,4 @@
-export type PsyxBlockKind = 'func' | 'class' | 'preamble';
+export type PsyxBlockKind = 'func' | 'func-main' | 'class' | 'preamble';
 
 export interface PsyxBlock {
   kind: PsyxBlockKind;
@@ -13,6 +13,7 @@ export interface PsyxBlock {
 }
 
 const FUNC_START = /^FUNC-START\s+(\S+)/;
+const FUNC_MAIN = /^FUNC-MAIN/;
 const FUNC_END = /^FUNC-END/;
 const CLASS_START = /^CLASS-START\s+(\S+)/;
 const CLASS_END = /^CLASS-END/;
@@ -51,17 +52,18 @@ export function parsePsyx(source: string): PsyxBlock[] {
     }
 
     const funcMatch = line.match(FUNC_START);
+    const funcMainMatch = line.match(FUNC_MAIN);
     const classMatch = line.match(CLASS_START);
 
-    if (funcMatch || classMatch) {
+    if (funcMatch || funcMainMatch || classMatch) {
       if (preambleLines.length > 0 && preambleLines.some(l => l.trim() !== '')) {
         blocks.push({ kind: 'preamble', name: '__preamble__', body: preambleLines.join('\n').trim(), index: blockIndex++ });
         preambleLines.length = 0;
       }
 
-      const kind: PsyxBlockKind = funcMatch ? 'func' : 'class';
-      const name = (funcMatch ?? classMatch)![1];
-      const endRe = funcMatch ? FUNC_END : CLASS_END;
+      const kind: PsyxBlockKind = funcMainMatch ? 'func-main' : (funcMatch ? 'func' : 'class');
+      const name = funcMainMatch ? 'main' : (funcMatch ?? classMatch)![1];
+      const endRe = (funcMatch || funcMainMatch) ? FUNC_END : CLASS_END;
       const bodyLines: string[] = [lines[i]];
       i++;
 

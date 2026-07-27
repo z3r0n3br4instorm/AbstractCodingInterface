@@ -12,10 +12,10 @@ export interface PsyxBlock {
   };
 }
 
-const FUNC_START = /^FUNC-START\s+([a-zA-Z_][a-zA-Z0-9_]*)$/;
+const FUNC_START = /^FUNC-START\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:[\s\(].*)?$/;
 const FUNC_MAIN = /^FUNC-MAIN$/;
 const FUNC_END = /^FUNC-END$/;
-const CLASS_START = /^CLASS-START\s+([a-zA-Z_][a-zA-Z0-9_]*)$/;
+const CLASS_START = /^CLASS-START\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:[\s\(].*)?$/;
 const CLASS_END = /^CLASS-END$/;
 const AFTER_BLOCK = /^AFTER-BLOCK-([a-zA-Z_][a-zA-Z0-9_]*)$/;
 const BEFORE_BLOCK = /^BEFORE-BLOCK-([a-zA-Z_][a-zA-Z0-9_]*)$/;
@@ -65,10 +65,10 @@ export function parsePsyx(source: string): PsyxBlock[] {
     const classMatch = line.match(CLASS_START);
 
     if (line.startsWith('FUNC-START') && !funcMatch) {
-      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'FUNC-START <name>' where <name> is a single word (no spaces or parentheses).`);
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'FUNC-START <name>' where <name> is a valid identifier. You can optionally include arguments after the name.`);
     }
     if (line.startsWith('CLASS-START') && !classMatch) {
-      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'CLASS-START <name>' where <name> is a single word.`);
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'CLASS-START <name>' where <name> is a valid identifier. You can optionally include inheritance after the name.`);
     }
     if (line.startsWith('FUNC-MAIN') && !funcMainMatch) {
       throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'FUNC-MAIN'.`);

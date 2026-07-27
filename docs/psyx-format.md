@@ -40,7 +40,8 @@ FUNC-MAIN
 FUNC-END
 ```
 
-- `<name>` must be a single word (no spaces). Use underscores for multi-word names.
+- `<name>` must be a single valid identifier (no spaces). 
+- **Optional**: You may include arguments or signatures directly after the name in the marker (e.g. `FUNC-START add(real x, real y)`). The compiler will still correctly extract `add` as the block name, while letting the LLM see your argument types.
 - Maps to a function or method in the target language.
 - On re-save, if only this block changed, only this function is recompiled.
 

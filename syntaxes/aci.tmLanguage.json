@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "ACI PSyx",
+  "scopeName": "source.aci",
+  "patterns": [
+    { "include": "#block-markers" },
+    { "include": "#keywords" },
+    { "include": "#comments" },
+    { "include": "#strings" }
+  ],
+  "repository": {
+    "block-markers": {
+      "patterns": [
+        {
+          "match": "^(FUNC-START|FUNC-END|CLASS-START|CLASS-END)(?:\\s+(\\S+))?",
+          "captures": {
+            "1": { "name": "keyword.control.block.aci" },
+            "2": { "name": "entity.name.function.aci" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(INPUT|OUTPUT|STEP|IF|ELSE|LOOP|RETURN|CALL|SET|LET|WHEN|THEN|AND|OR|NOT|AS|IN|OF|WITH|FROM|TO|USE|IMPORT|RAISE|TRY|CATCH|FINALLY|YIELD|AWAIT|ASYNC)\\b",
+          "name": "keyword.other.aci"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "match": "#.*$",
+          "name": "comment.line.hash.aci"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "match": "\"[^\"]*\"",
+          "name": "string.quoted.double.aci"
+        },
+        {
+          "match": "'[^']*'",
+          "name": "string.quoted.single.aci"
+        }
+      ]
+    }
+  }
+}

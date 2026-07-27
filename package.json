@@ -1,0 +1,91 @@
+{
+  "name": "aci",
+  "displayName": "ACI",
+  "description": "Abstract Coding Interface",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:aci"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "aci",
+        "aliases": ["ACI PSyx", "aci"],
+        "extensions": [".aci"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "aci",
+        "scopeName": "source.aci",
+        "path": "./syntaxes/aci.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "ACI Settings",
+      "properties": {
+        "aci.backend": {
+          "type": "string",
+          "enum": [
+            "ollama",
+            "openai-compatible"
+          ],
+          "default": "ollama",
+          "description": "The backend to use for generating code"
+        },
+        "aci.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "The base URL of the local model API"
+        },
+        "aci.model": {
+          "type": "string",
+          "default": "llama3",
+          "description": "The model to use for generation"
+        },
+        "aci.targetLanguage": {
+          "type": "string",
+          "default": "python",
+          "description": "The target language to compile to"
+        },
+        "aci.compileTrigger": {
+          "type": "string",
+          "enum": [
+            "onSave",
+            "onType"
+          ],
+          "default": "onSave",
+          "description": "When to trigger code generation"
+        },
+        "aci.onTypeDebounceMs": {
+          "type": "number",
+          "default": 800,
+          "description": "Debounce time in milliseconds for onType trigger"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5"
+  }
+}

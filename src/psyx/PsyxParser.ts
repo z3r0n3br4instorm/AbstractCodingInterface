@@ -12,14 +12,14 @@ export interface PsyxBlock {
   };
 }
 
-const FUNC_START = /^FUNC-START\s+(\S+)/;
-const FUNC_MAIN = /^FUNC-MAIN/;
-const FUNC_END = /^FUNC-END/;
-const CLASS_START = /^CLASS-START\s+(\S+)/;
-const CLASS_END = /^CLASS-END/;
-const AFTER_BLOCK = /^AFTER-BLOCK-(\S+)/;
-const BEFORE_BLOCK = /^BEFORE-BLOCK-(\S+)/;
-const BETWEEN_BLOCKS = /^BETWEEN-BLOCKS-(\S+)-(\S+)/;
+const FUNC_START = /^FUNC-START\s+([a-zA-Z_][a-zA-Z0-9_]*)$/;
+const FUNC_MAIN = /^FUNC-MAIN$/;
+const FUNC_END = /^FUNC-END$/;
+const CLASS_START = /^CLASS-START\s+([a-zA-Z_][a-zA-Z0-9_]*)$/;
+const CLASS_END = /^CLASS-END$/;
+const AFTER_BLOCK = /^AFTER-BLOCK-([a-zA-Z_][a-zA-Z0-9_]*)$/;
+const BEFORE_BLOCK = /^BEFORE-BLOCK-([a-zA-Z_][a-zA-Z0-9_]*)$/;
+const BETWEEN_BLOCKS = /^BETWEEN-BLOCKS-([a-zA-Z_][a-zA-Z0-9_]*)-([a-zA-Z_][a-zA-Z0-9_]*)$/;
 
 export function parsePsyx(source: string): PsyxBlock[] {
   const lines = source.split('\n');
@@ -33,18 +33,27 @@ export function parsePsyx(source: string): PsyxBlock[] {
     const line = lines[i].trim();
 
     const afterMatch = line.match(AFTER_BLOCK);
+    if (line.startsWith('AFTER-BLOCK-') && !afterMatch) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'AFTER-BLOCK-<target>' where <target> is a single word.`);
+    }
     if (afterMatch) {
       currentPosition = { type: 'after', target1: afterMatch[1] };
       i++;
       continue;
     }
     const beforeMatch = line.match(BEFORE_BLOCK);
+    if (line.startsWith('BEFORE-BLOCK-') && !beforeMatch) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'BEFORE-BLOCK-<target>' where <target> is a single word.`);
+    }
     if (beforeMatch) {
       currentPosition = { type: 'before', target1: beforeMatch[1] };
       i++;
       continue;
     }
     const betweenMatch = line.match(BETWEEN_BLOCKS);
+    if (line.startsWith('BETWEEN-BLOCKS-') && !betweenMatch) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'BETWEEN-BLOCKS-<target1>-<target2>' where targets are single words.`);
+    }
     if (betweenMatch) {
       currentPosition = { type: 'between', target1: betweenMatch[1], target2: betweenMatch[2] };
       i++;
@@ -54,6 +63,22 @@ export function parsePsyx(source: string): PsyxBlock[] {
     const funcMatch = line.match(FUNC_START);
     const funcMainMatch = line.match(FUNC_MAIN);
     const classMatch = line.match(CLASS_START);
+
+    if (line.startsWith('FUNC-START') && !funcMatch) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'FUNC-START <name>' where <name> is a single word (no spaces or parentheses).`);
+    }
+    if (line.startsWith('CLASS-START') && !classMatch) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected 'CLASS-START <name>' where <name> is a single word.`);
+    }
+    if (line.startsWith('FUNC-MAIN') && !funcMainMatch) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'FUNC-MAIN'.`);
+    }
+    if (line.startsWith('FUNC-END') && !line.match(FUNC_END)) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'FUNC-END'.`);
+    }
+    if (line.startsWith('CLASS-END') && !line.match(CLASS_END)) {
+      throw new Error(`Syntax Error on line ${i + 1}: '${line}'. Expected exactly 'CLASS-END'.`);
+    }
 
     if (funcMatch || funcMainMatch || classMatch) {
       if (preambleLines.length > 0 && preambleLines.some(l => l.trim() !== '')) {

@@ -25,7 +25,7 @@ function extractCode(text: string): string {
   return text;
 }
 
-function buildCompileSystemPrompt(targetLang: string, kind: string): string {
+function buildCompileSystemPrompt(targetLang: string, kind: string, signatures: string[]): string {
   let prompt = `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
 CRITICAL: Output ONLY the raw ${targetLang} code — no markdown fences, no conversational text, no explanations, no <think> blocks. Outputting anything other than raw code is a fatal error.
 Preserve correct indentation and style for ${targetLang}.`;
@@ -34,6 +34,12 @@ Preserve correct indentation and style for ${targetLang}.`;
     prompt += `\nIf this block requires any libraries to be imported/included, output those import statements at the VERY TOP of your response (line 1), followed by a blank line, and then the function/class code.`;
   } else if (kind === 'import') {
     prompt += `\nThis is the global imports block. Output ONLY the required import/include statements for the target language.`;
+  }
+
+  if (signatures.length > 0 && (kind === 'func-main' || kind === 'func')) {
+    prompt += `\n\nCRITICAL: The following functions/classes are already defined globally in this file:
+${signatures.map(s => `- ${s}`).join('\n')}
+DO NOT generate forward declarations, interfaces, or implementations for these. Assume they already exist in the global scope. Just call them directly using these exact names.`;
   }
 
   if (kind === 'func-main') {
@@ -193,7 +199,13 @@ export class CompileOrchestrator {
             const existing = existingCompiledBlocks.find(c => c.psyxKind === b.kind && c.psyxName === b.name);
             return !existing || existing.hash !== b.hash;
           })
-        : newBlocks;
+        : [...newBlocks];
+
+      blocksToCompile.sort((a, b) => {
+        if (a.kind === 'func-main' && b.kind !== 'func-main') return 1;
+        if (b.kind === 'func-main' && a.kind !== 'func-main') return -1;
+        return 0;
+      });
 
       if (!existingText) {
         const we = new vscode.WorkspaceEdit();
@@ -214,6 +226,11 @@ export class CompileOrchestrator {
       const backend = BackendFactory.getBackend();
       const freshCode = new Map<string, string>();
       const globalImports = new Set<string>();
+      
+      const signatures = newBlocks
+        .filter(b => b.kind === 'func' || b.kind === 'class')
+        .map(b => b.signature)
+        .filter(s => s);
 
       for (let i = 0; i < blocksToCompile.length; i++) {
         const block = blocksToCompile[i];
@@ -223,7 +240,7 @@ export class CompileOrchestrator {
         this.statusBar.show();
 
         const messages = [
-          { role: 'system', content: buildCompileSystemPrompt(targetLang, block.kind) },
+          { role: 'system', content: buildCompileSystemPrompt(targetLang, block.kind, signatures) },
           { role: 'user', content: block.body }
         ];
 
@@ -262,7 +279,7 @@ export class CompileOrchestrator {
       if (globalImports.size > 0) {
         let importBlock = newBlocks.find(b => b.kind === 'import');
         if (!importBlock) {
-          importBlock = { kind: 'import', name: '__imports__', body: '', index: -1, hash: '' };
+          importBlock = { kind: 'import', name: '__imports__', body: '', index: -1, hash: '', signature: '' };
           const preambleIndex = newBlocks.findIndex(b => b.kind === 'preamble');
           if (preambleIndex !== -1) newBlocks.splice(preambleIndex + 1, 0, importBlock!);
           else newBlocks.unshift(importBlock!);

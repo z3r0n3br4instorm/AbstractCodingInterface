@@ -13,6 +13,7 @@ export interface PsyxBlock {
     target2?: string;
   };
   hash: string;
+  signature: string;
 }
 
 const FUNC_START = /^FUNC-START\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:[\s\(].*)?$/;
@@ -96,7 +97,7 @@ export function parsePsyx(source: string): PsyxBlock[] {
       if (preambleLines.length > 0 && preambleLines.some(l => l.trim() !== '')) {
         const body = preambleLines.join('\n').trim();
         const hash = crypto.createHash('md5').update(body).digest('hex').substring(0, 8);
-        blocks.push({ kind: 'preamble', name: '__preamble__', body, index: blockIndex++, hash });
+        blocks.push({ kind: 'preamble', name: '__preamble__', body, index: blockIndex++, hash, signature: '' });
         preambleLines.length = 0;
       }
 
@@ -106,6 +107,14 @@ export function parsePsyx(source: string): PsyxBlock[] {
       if (importMatch) kind = 'import';
       
       const name = importMatch ? '__imports__' : (funcMainMatch ? 'main' : (funcMatch ?? classMatch)![1]);
+      
+      let signature = '';
+      if (funcMatch || classMatch) {
+        signature = line.replace(/^(FUNC-START|CLASS-START)\s+/, '').trim();
+      } else if (funcMainMatch) {
+        signature = 'main()';
+      }
+
       const endRe = importMatch ? IMPORT_END : ((funcMatch || funcMainMatch) ? FUNC_END : CLASS_END);
       const bodyLines: string[] = [lines[i]];
       i++;
@@ -121,7 +130,7 @@ export function parsePsyx(source: string): PsyxBlock[] {
 
       const body = bodyLines.join('\n').trim();
       const hash = crypto.createHash('md5').update(body).digest('hex').substring(0, 8);
-      blocks.push({ kind, name, body, index: blockIndex++, position: currentPosition, hash });
+      blocks.push({ kind, name, body, index: blockIndex++, position: currentPosition, hash, signature });
       currentPosition = undefined;
     } else {
       preambleLines.push(lines[i]);
@@ -132,7 +141,23 @@ export function parsePsyx(source: string): PsyxBlock[] {
   if (preambleLines.some(l => l.trim() !== '')) {
     const body = preambleLines.join('\n').trim();
     const hash = crypto.createHash('md5').update(body).digest('hex').substring(0, 8);
-    blocks.push({ kind: 'preamble', name: '__preamble__', body, index: blockIndex++, hash });
+    blocks.push({ kind: 'preamble', name: '__preamble__', body, index: blockIndex++, hash, signature: '' });
+  }
+
+  // Validate CALL statements
+  const definedNames = new Set(blocks.filter(b => b.kind === 'func' || b.kind === 'class').map(b => b.name));
+  
+  for (const block of blocks) {
+    const blockLines = block.body.split('\n');
+    for (let j = 0; j < blockLines.length; j++) {
+      const match = blockLines[j].match(/\bCALL\s+([a-zA-Z_][a-zA-Z0-9_]*)/i);
+      if (match) {
+        const target = match[1];
+        if (!definedNames.has(target)) {
+          throw new Error(`Syntax Error: Unknown CALL target '${target}'. It does not match any defined FUNC-START or CLASS-START block in this file.`);
+        }
+      }
+    }
   }
 
   return blocks;

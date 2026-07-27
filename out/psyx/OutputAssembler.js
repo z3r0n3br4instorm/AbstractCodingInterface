@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getCommentSyntax = getCommentSyntax;
+exports.extractImports = extractImports;
 exports.serializeOutput = serializeOutput;
 exports.deserializeOutput = deserializeOutput;
 exports.mergeBlocks = mergeBlocks;
@@ -33,18 +34,49 @@ function getCommentSyntax(ext) {
 function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+const IMPORT_PATTERNS = {
+    c: /^\s*#\s*include\s*[<"]/i,
+    cpp: /^\s*#\s*include\s*[<"]/i,
+    python: /^\s*(import\s|from\s.+\simport\s)/i,
+    javascript: /^\s*(import\s|const\s.+=\s*require\()/i,
+    typescript: /^\s*(import\s|const\s.+=\s*require\()/i,
+    java: /^\s*import\s/i,
+    go: /^\s*import\s/i,
+    rust: /^\s*use\s/i,
+    ruby: /^\s*require\s/i,
+    php: /^\s*(require|include)(_once)?\s/i,
+};
+function extractImports(code, lang) {
+    const lines = code.split('\n');
+    const imports = [];
+    const remaining = [];
+    // Default to a generous catch-all if language isn't explicitly matched
+    const pattern = IMPORT_PATTERNS[lang.toLowerCase()] || /^\s*(import\s|from\s|#\s*include\s|using\s|require\s*\()/i;
+    for (const line of lines) {
+        if (pattern.test(line)) {
+            imports.push(line);
+        }
+        else {
+            remaining.push(line);
+        }
+    }
+    return { imports, remainingCode: remaining.join('\n').trim() };
+}
 function serializeOutput(blocks, ext) {
     const c = getCommentSyntax(ext);
     return blocks
-        .map(b => `${c.start}ACI-BLOCK: ${b.psyxKind}:${b.psyxName}${c.end}\n${b.code.trimEnd()}\n${c.start}ACI-BLOCK-END${c.end}`)
+        .map(b => {
+        const hashPart = b.hash ? ` [hash:${b.hash}]` : '';
+        return `${c.start}ACI-BLOCK: ${b.psyxKind}:${b.psyxName}${hashPart}${c.end}\n${b.code.trimEnd()}\n${c.start}ACI-BLOCK-END${c.end}`;
+    })
         .join('\n\n') + '\n';
 }
 function deserializeOutput(source, ext) {
     const c = getCommentSyntax(ext);
     const start = escapeRegex(c.start);
     const end = escapeRegex(c.end);
-    // Format: {start}ACI-BLOCK: {kind}:{name}{end}\n{code}\n{start}ACI-BLOCK-END{end}
-    const regexStr = `${start}ACI-BLOCK:\\s*([^\\s:]+):([^\\n]+?)${end}\\n([\\s\\S]*?)\\n${start}ACI-BLOCK-END${end}`;
+    // Format: {start}ACI-BLOCK: {kind}:{name} [hash:{hash}]{end}\n{code}\n{start}ACI-BLOCK-END{end}
+    const regexStr = `${start}ACI-BLOCK:\\s*([^\\s:]+):([^\\s]+)(?:\\s+\\[hash:([a-f0-9]+)\\])?${end}\\n([\\s\\S]*?)\\n${start}ACI-BLOCK-END${end}`;
     const regex = new RegExp(regexStr, 'g');
     const blocks = [];
     let match;
@@ -52,7 +84,8 @@ function deserializeOutput(source, ext) {
         blocks.push({
             psyxKind: match[1],
             psyxName: match[2].trim(),
-            code: match[3].trimEnd()
+            hash: match[3],
+            code: match[4].trimEnd()
         });
     }
     return blocks;
@@ -71,7 +104,7 @@ function mergeBlocks(existing, incoming, freshCode) {
                 code = '';
             }
         }
-        const newCompiledBlock = { psyxName: block.name, psyxKind: block.kind, code };
+        const newCompiledBlock = { psyxName: block.name, psyxKind: block.kind, code, hash: block.hash };
         if (block.position) {
             if (existingIndex !== -1) {
                 finalBlocks.splice(existingIndex, 1);

@@ -9,6 +9,7 @@ class OpenAICompatibleBackend {
             model: Configuration_1.Configuration.model,
             messages: messages,
             stream: true,
+            temperature: Configuration_1.Configuration.temperature
         };
         const response = await fetch(url, {
             method: 'POST',

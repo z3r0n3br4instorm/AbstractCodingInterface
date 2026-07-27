@@ -59,10 +59,25 @@ function extractCode(text) {
         return open[1];
     return text;
 }
-function buildCompileSystemPrompt(targetLang) {
-    return `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
-Output ONLY the raw ${targetLang} code — no markdown fences, no explanations, no comments, no <think> blocks.
+function buildCompileSystemPrompt(targetLang, kind, signatures) {
+    let prompt = `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
+CRITICAL: Output ONLY the raw ${targetLang} code — no markdown fences, no conversational text, no explanations, no <think> blocks. Outputting anything other than raw code is a fatal error.
 Preserve correct indentation and style for ${targetLang}.`;
+    if (kind === 'func' || kind === 'class' || kind === 'func-main') {
+        prompt += `\nIf this block requires any libraries to be imported/included, output those import statements at the VERY TOP of your response (line 1), followed by a blank line, and then the function/class code.`;
+    }
+    else if (kind === 'import') {
+        prompt += `\nThis is the global imports block. Output ONLY the required import/include statements for the target language.`;
+    }
+    if (signatures.length > 0 && (kind === 'func-main' || kind === 'func')) {
+        prompt += `\n\nCRITICAL: The following functions/classes are already defined globally in this file:
+${signatures.map(s => `- ${s}`).join('\n')}
+DO NOT generate forward declarations, interfaces, or implementations for these. Assume they already exist in the global scope. Just call them directly using these exact names.`;
+    }
+    if (kind === 'func-main') {
+        prompt += `\n\nCRITICAL: This is the MAIN function entry point of the program. You must output the standard main execution block for ${targetLang}. For example, in Python: \`if __name__ == "__main__":\`, in Go: \`func main()\`, in Java: \`public static void main(String[] args)\`, etc.`;
+    }
+    return prompt;
 }
 function buildMakePsyxCompatibleSystemPrompt(sourceLang, ext) {
     const c = (0, OutputAssembler_1.getCommentSyntax)(ext);
@@ -74,6 +89,7 @@ ${c.start}ACI-BLOCK: func:<function_name>${c.end}
 ${c.start}ACI-BLOCK-END${c.end}
 
 For classes, use \`class:<class_name>\`.
+If you find the main entry point of the program (e.g. \`if __name__ == "__main__":\` or \`func main()\`), wrap it with \`func-main:main\`.
 Leave all other code (imports, globals) unannotated.
 DO NOT change the source code itself, just insert the comment lines. Output ONLY the fully annotated source code, with NO markdown code fences (\`\`\`) and NO <think> blocks.`;
 }
@@ -179,7 +195,6 @@ class CompileOrchestrator {
             const newBlocks = (0, PsyxParser_1.parsePsyx)(document.getText());
             let existingText = null;
             let existingCompiledBlocks = [];
-            let existingPsyxBlocks = [];
             let targetDoc = null;
             try {
                 targetDoc = await vscode.workspace.openTextDocument(targetUri);
@@ -190,8 +205,18 @@ class CompileOrchestrator {
                 existingText = null;
             }
             const blocksToCompile = existingText
-                ? (0, PsyxParser_1.blocksChanged)(existingPsyxBlocks, newBlocks)
-                : newBlocks;
+                ? newBlocks.filter(b => {
+                    const existing = existingCompiledBlocks.find(c => c.psyxKind === b.kind && c.psyxName === b.name);
+                    return !existing || existing.hash !== b.hash;
+                })
+                : [...newBlocks];
+            blocksToCompile.sort((a, b) => {
+                if (a.kind === 'func-main' && b.kind !== 'func-main')
+                    return 1;
+                if (b.kind === 'func-main' && a.kind !== 'func-main')
+                    return -1;
+                return 0;
+            });
             if (!existingText) {
                 const we = new vscode.WorkspaceEdit();
                 we.createFile(targetUri, { overwrite: true });
@@ -207,13 +232,18 @@ class CompileOrchestrator {
             }
             const backend = BackendFactory_1.BackendFactory.getBackend();
             const freshCode = new Map();
+            const globalImports = new Set();
+            const signatures = newBlocks
+                .filter(b => b.kind === 'func' || b.kind === 'class')
+                .map(b => b.signature)
+                .filter(s => s);
             for (let i = 0; i < blocksToCompile.length; i++) {
                 const block = blocksToCompile[i];
                 const key = block.kind + ':' + block.name;
                 this.statusBar.text = `$(sync~spin) ACI: Compiling ${block.name} (${i + 1}/${blocksToCompile.length})`;
                 this.statusBar.show();
                 const messages = [
-                    { role: 'system', content: buildCompileSystemPrompt(targetLang) },
+                    { role: 'system', content: buildCompileSystemPrompt(targetLang, block.kind, signatures) },
                     { role: 'user', content: block.body }
                 ];
                 let blockBuffer = '';
@@ -224,6 +254,7 @@ class CompileOrchestrator {
                     freshCode.set(key, extractCode(stripThinking(blockBuffer)));
                     const now = Date.now();
                     if (now - lastUpdate > 50) {
+                        // live streaming might have imports at top, we don't extract until final
                         const assembled = (0, OutputAssembler_1.mergeBlocks)(existingCompiledBlocks, newBlocks, freshCode);
                         const newText = (0, OutputAssembler_1.serializeOutput)(assembled, ext);
                         await editor.edit(eb => {
@@ -234,7 +265,28 @@ class CompileOrchestrator {
                         lastUpdate = now;
                     }
                 }
-                freshCode.set(key, extractCode(stripThinking(blockBuffer)));
+                let finalBufferContent = extractCode(stripThinking(blockBuffer)).trim();
+                if (block.kind !== 'import' && block.kind !== 'preamble') {
+                    const extracted = (0, OutputAssembler_1.extractImports)(finalBufferContent, targetLang);
+                    finalBufferContent = extracted.remainingCode;
+                    extracted.imports.forEach(i => globalImports.add(i));
+                }
+                freshCode.set(key, finalBufferContent);
+            }
+            if (globalImports.size > 0) {
+                let importBlock = newBlocks.find(b => b.kind === 'import');
+                if (!importBlock) {
+                    importBlock = { kind: 'import', name: '__imports__', body: '', index: -1, hash: '', signature: '' };
+                    const preambleIndex = newBlocks.findIndex(b => b.kind === 'preamble');
+                    if (preambleIndex !== -1)
+                        newBlocks.splice(preambleIndex + 1, 0, importBlock);
+                    else
+                        newBlocks.unshift(importBlock);
+                }
+                const existingImportCode = existingCompiledBlocks.find(b => b.psyxKind === 'import' && b.psyxName === '__imports__')?.code || '';
+                const existingImportLines = new Set(existingImportCode.split('\n').map(l => l.trim()).filter(l => l));
+                globalImports.forEach(i => existingImportLines.add(i));
+                freshCode.set('import:__imports__', Array.from(existingImportLines).join('\n'));
             }
             const finalAssembled = (0, OutputAssembler_1.mergeBlocks)(existingCompiledBlocks, newBlocks, freshCode);
             const finalText = (0, OutputAssembler_1.serializeOutput)(finalAssembled, ext);

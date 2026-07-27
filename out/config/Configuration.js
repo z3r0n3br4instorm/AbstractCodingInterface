@@ -45,6 +45,9 @@ class Configuration {
     static get model() {
         return vscode.workspace.getConfiguration('aci').get('model') || 'llama3';
     }
+    static get temperature() {
+        return vscode.workspace.getConfiguration('aci').get('temperature') ?? 0;
+    }
     static get targetLanguage() {
         return vscode.workspace.getConfiguration('aci').get('targetLanguage') || 'python';
     }

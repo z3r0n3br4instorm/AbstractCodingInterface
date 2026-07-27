@@ -9,6 +9,9 @@ class OllamaBackend {
             model: Configuration_1.Configuration.model,
             messages: messages,
             stream: true,
+            options: {
+                temperature: Configuration_1.Configuration.temperature
+            }
         };
         const response = await fetch(url, {
             method: 'POST',

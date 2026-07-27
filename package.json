@@ -3,6 +3,10 @@
   "displayName": "ACI",
   "description": "Abstract Coding Interface",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/z3r0n3br4instorm/AbstractCodingInterface"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -10,15 +14,69 @@
     "Other"
   ],
   "activationEvents": [
+    "onCommand:aci.compile",
+    "onCommand:aci.decompile",
     "onLanguage:aci"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "aci.compile",
+        "title": "ACI: Compile PSyx to Code",
+        "icon": "$(play)"
+      },
+      {
+        "command": "aci.makePsyxCompatible",
+        "title": "ACI: Make File PSyx Compatible",
+        "icon": "$(symbol-event)"
+      },
+      {
+        "command": "aci.editSetting",
+        "title": "Edit ACI Setting"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "aci.compile",
+          "when": "editorLangId == aci",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aci.makePsyxCompatible",
+          "when": "editorLangId != aci",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aci-sidebar",
+          "title": "ACI-PSyx",
+          "icon": "$(gear)"
+        }
+      ]
+    },
+    "views": {
+      "aci-sidebar": [
+        {
+          "id": "aci-settings",
+          "name": "Configuration"
+        }
+      ]
+    },
     "languages": [
       {
         "id": "aci",
-        "aliases": ["ACI PSyx", "aci"],
-        "extensions": [".aci"],
+        "aliases": [
+          "ACI PSyx",
+          "aci"
+        ],
+        "extensions": [
+          ".aci"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],

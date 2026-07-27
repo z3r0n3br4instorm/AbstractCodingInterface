@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { BackendFactory } from '../backends/BackendFactory';
 import { Configuration } from '../config/Configuration';
 import { parsePsyx, blocksChanged, PsyxBlock } from '../psyx/PsyxParser';
-import { serializeOutput, deserializeOutput, mergeBlocks, CompiledBlock } from '../psyx/OutputAssembler';
+import { serializeOutput, deserializeOutput, mergeBlocks, CompiledBlock, getCommentSyntax } from '../psyx/OutputAssembler';
 
 const LANG_EXTS: Record<string, string> = {
   python: 'py', javascript: 'js', typescript: 'ts',
@@ -25,10 +25,24 @@ function extractCode(text: string): string {
   return text;
 }
 
-function buildSystemPrompt(targetLang: string): string {
+function buildCompileSystemPrompt(targetLang: string): string {
   return `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
 Output ONLY the raw ${targetLang} code — no markdown fences, no explanations, no comments, no <think> blocks.
 Preserve correct indentation and style for ${targetLang}.`;
+}
+
+function buildMakePsyxCompatibleSystemPrompt(sourceLang: string, ext: string): string {
+  const c = getCommentSyntax(ext);
+  return `You are an ACI assistant. Annotate the provided ${sourceLang} source code with ACI block markers so it becomes PSyx-compatible.
+Find every function/method and class in the code.
+Wrap each one with the appropriate block marker comments using this exact syntax:
+${c.start}ACI-BLOCK: func:<function_name>${c.end}
+<function body>
+${c.start}ACI-BLOCK-END${c.end}
+
+For classes, use \`class:<class_name>\`.
+Leave all other code (imports, globals) unannotated.
+DO NOT change the source code itself, just insert the comment lines. Output ONLY the fully annotated source code, with NO markdown code fences (\`\`\`) and NO <think> blocks.`;
 }
 
 export class CompileOrchestrator {
@@ -67,7 +81,75 @@ export class CompileOrchestrator {
     return document.uri.with({ path: p });
   }
 
-  private async compile(document: vscode.TextDocument): Promise<void> {
+  public async makePsyxCompatible(document: vscode.TextDocument): Promise<void> {
+    if (document.languageId === 'aci') {
+      vscode.window.showInformationMessage('ACI: Focused file is a PSyx (.aci) document. Open the target code file instead!');
+      return;
+    }
+
+    const uriString = document.uri.toString();
+    if (this.compiling.has(uriString)) {
+      return;
+    }
+    this.compiling.add(uriString);
+
+    const fileName = document.uri.path.split('/').pop() || 'document';
+    const sourceLang = document.languageId || 'code';
+    const ext = document.uri.path.split('.').pop() || '';
+
+    try {
+      this.statusBar.text = `$(sync~spin) ACI: Making ${fileName} PSyx Compatible...`;
+      this.statusBar.show();
+
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.uri.toString() !== document.uri.toString()) {
+        throw new Error('Target document must be active in the editor.');
+      }
+
+      const backend = BackendFactory.getBackend();
+      const messages = [
+        { role: 'system', content: buildMakePsyxCompatibleSystemPrompt(sourceLang, ext) },
+        { role: 'user', content: document.getText() }
+      ];
+
+      const stream = backend.chat(messages);
+      let buffer = '';
+      let lastUpdate = Date.now();
+
+      for await (const chunk of stream) {
+        buffer += chunk;
+        const currentContent = extractCode(stripThinking(buffer));
+
+        const now = Date.now();
+        if (now - lastUpdate > 50) {
+          await editor.edit(eb => {
+            const last = document.lineCount - 1;
+            const lastChar = document.lineAt(last).text.length;
+            eb.replace(new vscode.Range(0, 0, last, lastChar), currentContent);
+          }, { undoStopBefore: false, undoStopAfter: false });
+          lastUpdate = now;
+        }
+      }
+
+      const finalContent = extractCode(stripThinking(buffer));
+      await editor.edit(eb => {
+        const last = document.lineCount - 1;
+        const lastChar = document.lineAt(last).text.length;
+        eb.replace(new vscode.Range(0, 0, last, lastChar), finalContent);
+      }, { undoStopBefore: false, undoStopAfter: true });
+
+      await document.save();
+      vscode.window.showInformationMessage(`ACI: Successfully made ${fileName} PSyx compatible!`);
+
+    } catch (e) {
+      vscode.window.showErrorMessage(`ACI PSyx Compatibility Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      this.compiling.delete(uriString);
+      this.statusBar.hide();
+    }
+  }
+
+  public async compile(document: vscode.TextDocument): Promise<void> {
     const uriString = document.uri.toString();
     if (this.compiling.has(uriString)) {
       return;
@@ -76,6 +158,7 @@ export class CompileOrchestrator {
 
     const targetLang = Configuration.targetLanguage;
     const targetUri = this.targetUri(document);
+    const ext = targetUri.path.split('.').pop() || '';
 
     try {
       const newBlocks = parsePsyx(document.getText());
@@ -88,7 +171,7 @@ export class CompileOrchestrator {
       try {
         targetDoc = await vscode.workspace.openTextDocument(targetUri);
         existingText = targetDoc.getText();
-        existingCompiledBlocks = deserializeOutput(existingText);
+        existingCompiledBlocks = deserializeOutput(existingText, ext);
       } catch {
         existingText = null;
       }
@@ -124,7 +207,7 @@ export class CompileOrchestrator {
         this.statusBar.show();
 
         const messages = [
-          { role: 'system', content: buildSystemPrompt(targetLang) },
+          { role: 'system', content: buildCompileSystemPrompt(targetLang) },
           { role: 'user', content: block.body }
         ];
 
@@ -140,7 +223,7 @@ export class CompileOrchestrator {
           const now = Date.now();
           if (now - lastUpdate > 50) {
             const assembled = mergeBlocks(existingCompiledBlocks, newBlocks, freshCode);
-            const newText = serializeOutput(assembled);
+            const newText = serializeOutput(assembled, ext);
             await editor.edit(eb => {
               const last = targetDoc!.lineCount - 1;
               const lastChar = targetDoc!.lineAt(last).text.length;
@@ -154,7 +237,7 @@ export class CompileOrchestrator {
       }
 
       const finalAssembled = mergeBlocks(existingCompiledBlocks, newBlocks, freshCode);
-      const finalText = serializeOutput(finalAssembled);
+      const finalText = serializeOutput(finalAssembled, ext);
       await editor.edit(eb => {
         const last = targetDoc!.lineCount - 1;
         const lastChar = targetDoc!.lineAt(last).text.length;

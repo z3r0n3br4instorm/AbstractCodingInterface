@@ -70,14 +70,33 @@ These are recognized and highlighted by the PSyx grammar. They are not enforced 
 | `LOOP` | Iteration (over a list, range, condition) |
 | `IN` / `OF` | Used with LOOP for iteration targets |
 | `CALL` | Invoke another function |
-| `RETURN` | Return a value |
-| `RAISE` | Raise an error or exception |
+| `RETURN <value>` | Return a value |
+| `CALL <function>` | Invoke another function |
+| `SET <var> TO <value>` | Variable assignment |
+| `LET <var> BE <value>` | Variable assignment |
 | `TRY` / `CATCH` / `FINALLY` | Error handling |
 | `IMPORT` / `USE` / `FROM` | Declare dependencies |
 | `AS` / `WITH` | Binding or context managers |
 | `AND` / `OR` / `NOT` | Boolean logic |
 | `TO` | Range boundaries or assignment targets |
 | `ASYNC` / `AWAIT` / `YIELD` | Async and generator constructs |
+
+### Relative Positioning (Patching)
+
+You can write partial `.aci` files that only contain snippets to be injected into an existing codebase. By using relative positioning markers, the ACI compiler will seamlessly insert new blocks into the target code file without removing existing blocks.
+
+- `AFTER-BLOCK-<name>`: Inserts the following block immediately after the specified block.
+- `BEFORE-BLOCK-<name>`: Inserts the following block immediately before the specified block.
+- `BETWEEN-BLOCKS-<name1>-<name2>`: Inserts the following block between the two specified blocks.
+
+Example of adding a new function to an existing file:
+```text
+AFTER-BLOCK-main
+
+FUNC-START new_feature
+  STEP do something awesome
+FUNC-END
+```
 
 ---
 
@@ -157,23 +176,23 @@ CLASS-END
 
 ## Output File Format
 
-The compiled output file uses internal `// ACI-BLOCK:` markers to track which code corresponds to which PSyx block. These are used on re-save to detect what changed and avoid recompiling unchanged blocks.
+The compiled output file uses internal comment markers (adapted to the target language, e.g., `#` for Python, `//` for TS/JS, `<!--` for HTML) to track which code corresponds to which PSyx block. These are used on re-save to detect what changed and avoid recompiling unchanged blocks.
 
 ```python
-// ACI-BLOCK: preamble:__preamble__
+# ACI-BLOCK: preamble:__preamble__
 import os
 import json
 CONFIG_PATH = "config.json"
-// ACI-BLOCK-END
+# ACI-BLOCK-END
 
-// ACI-BLOCK: func:load_config
+# ACI-BLOCK: func:load_config
 def load_config(path=CONFIG_PATH):
     try:
         with open(path) as f:
             return json.load(f)
     except Exception:
         return {}
-// ACI-BLOCK-END
+# ACI-BLOCK-END
 ```
 
-> **Do not manually edit the `// ACI-BLOCK:` lines.** They will be regenerated on the next compile cycle. Edits to the code between the markers are safe but will be overwritten if the corresponding PSyx block changes.
+> **Do not manually edit the `ACI-BLOCK` lines.** They will be regenerated on the next compile cycle. Edits to the code between the markers are safe but will be overwritten if the corresponding PSyx block changes.

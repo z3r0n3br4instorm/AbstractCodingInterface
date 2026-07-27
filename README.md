@@ -6,6 +6,17 @@ The core idea: keep a human-readable spec as the source of truth, and let a chea
 
 ---
 
+### Key Features
+- **Real-time Compilation**: Write pseudocode in `.aci` files and watch it seamlessly translate into real code (Python, JS, TS, Go, Rust, Java, C++, Ruby, PHP).
+- **Target Language Agnostic**: One PSyx file can be compiled into any language simply by changing the target configuration.
+- **Incremental Diff Compilation**: Only changed blocks are sent to the LLM and updated in the output file, avoiding the context bloat of full-file generation.
+- **Positional Code Patching**: Add relative markers like `AFTER-BLOCK-main` in `.aci` files to seamlessly inject new snippets into existing codebases.
+- **Make PSyx Compatible**: Transform existing source code into PSyx-compatible projects instantly by annotating it with ACI block comments.
+- **Top Bar Integration**: Easy access buttons directly in the editor tab bar for Compilation and Compatibility actions.
+- **Local Model Support**: Integrates seamlessly with Ollama (`llama3`, `qwen`, `phi3`) for offline, zero-latency coding or any OpenAI-compatible API.
+
+---
+
 ## Documentation
 
 | Doc | Description |

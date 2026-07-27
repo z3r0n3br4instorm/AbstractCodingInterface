@@ -1,5 +1,10 @@
 # ACI — Abstract Coding Interface
 
+> **Linux & macOS — install in one line:**
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/z3r0n3br4instorm/AbstractCodingInterface/main/install.sh | bash
+> ```
+
 ACI is a VS Code extension for spec-driven local-model coding. Write high-level pseudocode in **PSyx** (`.aci` files) and a local LLM compiles it into real source code — block by block, streamed live into a persistent side-pane file.
 
 The core idea: keep a human-readable spec as the source of truth, and let a cheap local model do the mechanical translation. Editing a single function recompiles only that function, not the whole file.
@@ -94,7 +99,17 @@ Full reference: [docs/psyx-format.md](./docs/psyx-format.md)
 
 ---
 
-## Install from VSIX
+## Install
+
+### One-liner (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/z3r0n3br4instorm/AbstractCodingInterface/main/install.sh | bash
+```
+
+Automatically downloads the latest release from GitHub and installs it via the `code` CLI.
+
+### Build from source
 
 **Build the package:**
 ```bash

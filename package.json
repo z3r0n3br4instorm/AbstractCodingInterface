@@ -3,6 +3,7 @@
   "displayName": "ACI",
   "description": "Abstract Coding Interface",
   "version": "0.1.0",
+  "icon": "images/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/z3r0n3br4instorm/AbstractCodingInterface"
@@ -55,7 +56,7 @@
         {
           "id": "aci-sidebar",
           "title": "ACI-PSyx",
-          "icon": "$(gear)"
+          "icon": "images/sidebar-icon.svg"
         }
       ]
     },

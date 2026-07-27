@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package extension
+        run: npx @vscode/vsce package --allow-missing-repository
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve VSIX filename
+        id: vsix
+        run: |
+          VSIX=$(ls *.vsix | head -n1)
+          echo "filename=${VSIX}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ACI v${{ steps.version.outputs.version }}
+          body: |
+            ## ACI — Abstract Coding Interface ${{ github.ref_name }}
+
+            ### Install via script
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/z3r0n3br4instorm/AbstractCodingInterface/main/install.sh | bash
+            ```
+
+            ### Install manually
+            1. Download `${{ steps.vsix.outputs.filename }}` below
+            2. Run:
+            ```bash
+            code --install-extension ${{ steps.vsix.outputs.filename }}
+            ```
+
+            ### What's new
+            See [CHANGELOG](https://github.com/z3r0n3br4instorm/AbstractCodingInterface/blob/main/CHANGELOG.md) for details.
+          files: ${{ steps.vsix.outputs.filename }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

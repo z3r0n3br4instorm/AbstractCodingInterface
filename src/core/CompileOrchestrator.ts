@@ -30,6 +30,10 @@ function buildCompileSystemPrompt(targetLang: string, kind: string): string {
 Output ONLY the raw ${targetLang} code — no markdown fences, no explanations, no comments, no <think> blocks.
 Preserve correct indentation and style for ${targetLang}.`;
 
+  if (kind === 'func' || kind === 'class') {
+    prompt += `\nCRITICAL: DO NOT output any import, include, or require statements. Assume all necessary libraries are already imported globally in the file. Output ONLY the function or class definition.`;
+  }
+
   if (kind === 'func-main') {
     prompt += `\n\nCRITICAL: This is the MAIN function entry point of the program. You must output the standard main execution block for ${targetLang}. For example, in Python: \`if __name__ == "__main__":\`, in Go: \`func main()\`, in Java: \`public static void main(String[] args)\`, etc.`;
   }

@@ -45,6 +45,42 @@ const LANG_EXTS = {
     cpp: 'cpp', c: 'c', html: 'html',
     css: 'css', ruby: 'rb', php: 'php'
 };
+/**
+ * Returns a regex that verifies `code` actually defines `name` in `lang`.
+ * Returns null when we don't have a rule for that language (skip validation).
+ */
+function buildDeclarationPattern(name, lang) {
+    const n = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    switch (lang.toLowerCase()) {
+        case 'python': return new RegExp(`^\\s*(?:async\\s+)?def\\s+${n}\\s*\\(`, 'm');
+        case 'javascript':
+        case 'typescript': return new RegExp(`(?:^\\s*(?:export\\s+)?(?:async\\s+)?function\\s+${n}\\s*\\(|^\\s*(?:export\\s+)?(?:const|let|var)\\s+${n}\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|\\w+)\\s*=>)`, 'm');
+        case 'go': return new RegExp(`^\\s*func\\s+${n}\\s*\\(`, 'm');
+        case 'rust': return new RegExp(`^\\s*(?:pub\\s+)?(?:async\\s+)?fn\\s+${n}\\s*\\(`, 'm');
+        case 'java': return new RegExp(`(?:public|private|protected|static|\\s)+[\\w<>\\[\\]]+\\s+${n}\\s*\\(`, 'm');
+        case 'c':
+        case 'cpp': return new RegExp(`^[\\w\\s*&]+\\s+${n}\\s*\\(`, 'm');
+        case 'ruby': return new RegExp(`^\\s*def\\s+${n}\\b`, 'm');
+        case 'php': return new RegExp(`^\\s*(?:public\\s+|private\\s+|protected\\s+|static\\s+)*function\\s+${n}\\s*\\(`, 'm');
+        default: return null;
+    }
+}
+/** Human-readable declaration hint for the retry prompt */
+function declarationHint(name, lang) {
+    switch (lang.toLowerCase()) {
+        case 'python': return `def ${name}(...):`;
+        case 'javascript':
+        case 'typescript': return `function ${name}(...) { ... }`;
+        case 'go': return `func ${name}(...) { ... }`;
+        case 'rust': return `fn ${name}(...) { ... }`;
+        case 'java': return `<ReturnType> ${name}(...) { ... }`;
+        case 'c':
+        case 'cpp': return `<return_type> ${name}(...) { ... }`;
+        case 'ruby': return `def ${name}; end`;
+        case 'php': return `function ${name}(...) { ... }`;
+        default: return `${name}(...)`;
+    }
+}
 function stripThinking(text) {
     return text
         .replace(/<think>[\s\S]*?<\/think>/g, '')
@@ -59,7 +95,7 @@ function extractCode(text) {
         return open[1];
     return text;
 }
-function buildCompileSystemPrompt(targetLang, kind, signatures) {
+function buildCompileSystemPrompt(targetLang, kind, blockName, signatures) {
     let prompt = `You are a PSyx compiler. Translate the following PSyx pseudocode block into ${targetLang} code.
 CRITICAL: Output ONLY the raw ${targetLang} code — no markdown fences, no conversational text, no explanations, no <think> blocks. Outputting anything other than raw code is a fatal error.
 Preserve correct indentation and style for ${targetLang}.`;
@@ -68,6 +104,12 @@ Preserve correct indentation and style for ${targetLang}.`;
     }
     else if (kind === 'import') {
         prompt += `\nThis is the global imports block. Output ONLY the required import/include statements for the target language.`;
+    }
+    if (kind === 'func' || kind === 'class') {
+        const hint = declarationHint(blockName, targetLang);
+        prompt += `\n\nCONTRACT (NON-NEGOTIABLE): Your output MUST define a callable named exactly \`${blockName}\`.
+The required declaration form is: ${hint}
+All logic for this block must live inside that function/class body. Do NOT emit module-level or top-level executable statements — any logic must be inside \`${blockName}\`.`;
     }
     if (signatures.length > 0 && (kind === 'func-main' || kind === 'func')) {
         prompt += `\n\nCRITICAL: The following functions/classes are already defined globally in this file:
@@ -243,7 +285,7 @@ class CompileOrchestrator {
                 this.statusBar.text = `$(sync~spin) ACI: Compiling ${block.name} (${i + 1}/${blocksToCompile.length})`;
                 this.statusBar.show();
                 const messages = [
-                    { role: 'system', content: buildCompileSystemPrompt(targetLang, block.kind, signatures) },
+                    { role: 'system', content: buildCompileSystemPrompt(targetLang, block.kind, block.name, signatures) },
                     { role: 'user', content: block.body }
                 ];
                 let blockBuffer = '';
@@ -270,6 +312,45 @@ class CompileOrchestrator {
                     const extracted = (0, OutputAssembler_1.extractImports)(finalBufferContent, targetLang);
                     finalBufferContent = extracted.remainingCode;
                     extracted.imports.forEach(i => globalImports.add(i));
+                }
+                // --- Declaration contract validation & auto-retry ---
+                if (block.kind === 'func' || block.kind === 'class') {
+                    const pattern = buildDeclarationPattern(block.name, targetLang);
+                    if (pattern && !pattern.test(finalBufferContent)) {
+                        // Attempt one retry with an explicit failure message
+                        this.statusBar.text = `$(warning) ACI: Retrying ${block.name} (declaration missing)…`;
+                        const retryMessages = [
+                            {
+                                role: 'system',
+                                content: buildCompileSystemPrompt(targetLang, block.kind, block.name, signatures)
+                            },
+                            { role: 'user', content: block.body },
+                            { role: 'assistant', content: finalBufferContent },
+                            {
+                                role: 'user',
+                                content: `Your previous output did not define \`${block.name}\`. Wrap ALL logic inside a ` +
+                                    `${declarationHint(block.name, targetLang)} definition. ` +
+                                    `Output ONLY the corrected ${targetLang} code, nothing else.`
+                            }
+                        ];
+                        let retryBuffer = '';
+                        for await (const chunk of backend.chat(retryMessages)) {
+                            retryBuffer += chunk;
+                        }
+                        const retryContent = extractCode(stripThinking(retryBuffer)).trim();
+                        if (pattern.test(retryContent)) {
+                            // Retry succeeded — use the better output
+                            const retryExtracted = (0, OutputAssembler_1.extractImports)(retryContent, targetLang);
+                            finalBufferContent = retryExtracted.remainingCode;
+                            retryExtracted.imports.forEach(i => globalImports.add(i));
+                        }
+                        else {
+                            // Both attempts failed — surface a hard error
+                            throw new Error(`Block '${block.name}' did not produce a valid ${targetLang} declaration after retry. ` +
+                                `Expected a definition matching: ${declarationHint(block.name, targetLang)}. ` +
+                                `Check your PSyx pseudocode and model output.`);
+                        }
+                    }
                 }
                 freshCode.set(key, finalBufferContent);
             }
